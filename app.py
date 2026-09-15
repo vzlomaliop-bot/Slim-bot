@@ -5,17 +5,16 @@ import os
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import (
-    Message, CallbackQuery,
-    InlineKeyboardMarkup, InlineKeyboardButton,
+    Message,
     ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove,
 )
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 from database import (
-    init_db, get_user, create_user, update_user,
-    add_water, get_water_today, add_weight, get_weights,
-    add_measurement, get_measurements, get_days_active,
+    init_db, get_user, create_user,
+    add_water, get_water_today, add_weight, get_weights, get_last_weight,
+    add_measurement, get_days_active,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +33,7 @@ class Onboard(StatesGroup):
 
 
 class Actions(StatesGroup):
+    choosing_weigh_type = State()
     entering_weight = State()
     entering_measurements = State()
 
@@ -66,6 +66,17 @@ def water_kb():
         keyboard=[
             [KeyboardButton(text="+250 мл"), KeyboardButton(text="+500 мл")],
             [KeyboardButton(text="+750 мл"), KeyboardButton(text="+1000 мл")],
+            [KeyboardButton(text="⬅️ В меню")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def weigh_type_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🌅 Натощак (утро)")],
+            [KeyboardButton(text="🌙 Перед сном")],
             [KeyboardButton(text="⬅️ В меню")],
         ],
         resize_keyboard=True,
@@ -253,7 +264,22 @@ async def add_water_cb(msg: Message):
 @dp.message(F.text == "⚖️ Записать вес")
 async def log_weight(msg: Message, state: FSMContext):
     await msg.answer(
-        "⚖️ Введи свой вес в кг (например `74.8`):",
+        "⚖️ **Какой вес записываем?**\n\n"
+        "🌅 **Натощак** — утром, после туалета, до еды (главный показатель)\n"
+        "🌙 **Перед сном** — вечером, для справки",
+        reply_markup=weigh_type_kb(),
+        parse_mode="Markdown",
+    )
+    await state.set_state(Actions.choosing_weigh_type)
+
+
+@dp.message(Actions.choosing_weigh_type, F.text.in_(["🌅 Натощак (утро)", "🌙 Перед сном"]))
+async def choose_weigh_type(msg: Message, state: FSMContext):
+    wt = "fasted" if "Натощак" in msg.text else "fed"
+    await state.update_data(weigh_type=wt)
+    label = "натощак" if wt == "fasted" else "перед сном"
+    await msg.answer(
+        f"Введи вес ({label}) в кг — например `74.8`",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown",
     )
@@ -268,12 +294,15 @@ async def save_weight(msg: Message, state: FSMContext):
     except:
         await msg.answer("Введи число (например 74.8).")
         return
-    add_weight(msg.from_user.id, w)
+    data = await state.get_data()
+    wt = data.get("weigh_type", "fasted")
+    add_weight(msg.from_user.id, w, wt)
     user = get_user(msg.from_user.id)
     left = round(w - user["goal_weight"], 1)
+    label = "натощак 🌅" if wt == "fasted" else "перед сном 🌙"
     await state.clear()
     await msg.answer(
-        f"✅ Записал: {w} кг\n\nОсталось до цели: **{left} кг**",
+        f"✅ Записал ({label}): {w} кг\n\nОсталось до цели: **{left} кг**",
         reply_markup=main_menu(),
         parse_mode="Markdown",
     )
@@ -311,24 +340,34 @@ async def save_measure(msg: Message, state: FSMContext):
 @dp.message(F.text == "📊 Прогресс")
 async def progress(msg: Message):
     user = get_user(msg.from_user.id)
-    weights = get_weights(msg.from_user.id, 10)
+    fasted = get_weights(msg.from_user.id, "fasted", 14)
+    last_fed = get_last_weight(msg.from_user.id, "fed")
     wd, wgd = get_days_active(msg.from_user.id)
 
     lines = ["📊 **Твой прогресс**\n"]
+
     if user:
         lost = round(user["start_weight"] - user["current_weight"], 1)
         left = round(user["current_weight"] - user["goal_weight"], 1)
         lines.append(f"🎯 {user['start_weight']} → {user['goal_weight']} кг")
         lines.append(f"📉 Сброшено: **{lost} кг**")
-        lines.append(f"⏳ Осталось: **{left} кг**\n")
+        lines.append(f"⏳ Осталось: **{left} кг**")
+        lines.append("")
+
+    if fasted:
+        lines.append("🌅 **Натощак (последние):**")
+        for d, w in fasted[-7:]:
+            lines.append(f"• {d}: {w} кг")
+        lines.append("")
+    else:
+        lines.append("🌅 Натощак: пока пусто\n")
+
+    if last_fed:
+        lines.append(f"🌙 Перед сном: {last_fed[0]}: {last_fed[1]} кг")
+        lines.append("")
 
     lines.append(f"💧 Дней с водой: {wd}")
-    lines.append(f"⚖️ Дней с весом: {wgd}\n")
-
-    if weights:
-        lines.append("**Последние замеры веса:**")
-        for d, w in weights[-7:]:
-            lines.append(f"• {d}: {w} кг")
+    lines.append(f"⚖️ Дней с весом: {wgd}")
 
     await msg.answer("\n".join(lines), reply_markup=main_menu(), parse_mode="Markdown")
 
@@ -358,7 +397,7 @@ async def help_cmd(msg: Message):
     await msg.answer(
         "**Как пользоваться:**\n\n"
         "💧 **Выпить воды** — отмечай, сколько выпил\n"
-        "⚖️ **Вес** — записывай каждое утро\n"
+        "⚖️ **Записать вес** — натощак утром + перед сном вечером\n"
         "📏 **Замеры** — раз в неделю\n"
         "📊 **Прогресс** — динамика\n\n"
         "Команды: /start, /help",

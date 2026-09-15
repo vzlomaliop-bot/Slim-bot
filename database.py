@@ -9,6 +9,7 @@ from datetime import datetime, date
 def init_db():
     conn = sqlite3.connect("slim.db")
     c = conn.cursor()
+
     c.execute("""CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
         username TEXT,
@@ -23,12 +24,14 @@ def init_db():
         daily_water INTEGER DEFAULT 2500,
         created_at TEXT
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS water (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         date TEXT,
         ml INTEGER
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS weights (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -36,16 +39,54 @@ def init_db():
         weight REAL,
         weigh_type TEXT DEFAULT 'fasted'
     )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS measurements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         date TEXT,
         neck REAL, chest REAL, waist REAL, hips REAL, arm REAL
     )""")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS dishes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        meal_type TEXT,
+        name TEXT,
+        base_calories REAL,
+        base_protein REAL,
+        base_fat REAL,
+        base_carbs REAL,
+        base_weight REAL,
+        ingredients TEXT
+    )""")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS food_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        date TEXT,
+        meal_type TEXT,
+        food_name TEXT,
+        grams REAL,
+        calories REAL,
+        protein REAL,
+        fat REAL,
+        carbs REAL
+    )""")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS user_foods (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        name TEXT,
+        per100_cal REAL,
+        per100_prot REAL,
+        per100_fat REAL,
+        per100_carb REAL
+    )""")
+
     try:
         c.execute("ALTER TABLE weights ADD COLUMN weigh_type TEXT DEFAULT 'fasted'")
     except:
         pass
+
     conn.commit()
     conn.close()
 
@@ -73,14 +114,6 @@ def create_user(uid, data):
         (uid, data.get("username"), data["gender"], data["age"], data["height"],
          data["start_weight"], data["start_weight"], data["goal_weight"],
          data["activity"], data["daily_calories"], datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
-
-
-def update_user(uid, field, value):
-    conn = sqlite3.connect("slim.db")
-    c = conn.cursor()
-    c.execute(f"UPDATE users SET {field}=? WHERE user_id=?", (value, uid))
     conn.commit()
     conn.close()
 
@@ -118,7 +151,7 @@ def add_weight(uid, weight, weigh_type="fasted"):
     conn.close()
 
 
-def get_weights(uid, weigh_type="fasted", limit=30):
+def get_weights(uid, weigh_type="fasted", limit=90):
     conn = sqlite3.connect("slim.db")
     c = conn.cursor()
     c.execute("""SELECT date, weight FROM weights
@@ -160,12 +193,149 @@ def get_measurements(uid, limit=10):
     return rows
 
 
-def get_days_active(uid):
+# ===== БЛЮДА =====
+
+def init_dishes():
     conn = sqlite3.connect("slim.db")
     c = conn.cursor()
-    c.execute("SELECT COUNT(DISTINCT date) FROM water WHERE user_id=?", (uid,))
-    wd = c.fetchone()[0]
-    c.execute("SELECT COUNT(DISTINCT date) FROM weights WHERE user_id=?", (uid,))
-    wgd = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM dishes")
+    if c.fetchone()[0] == 0:
+        dishes = [
+            # ЗАВТРАКИ
+            ("breakfast", "Овсянка с ягодами", 320, 12, 8, 48, 300,
+             "Овсянка 60г, Молоко 150мл, Ягоды 80г, Мёд 1ч.л."),
+            ("breakfast", "Омлет с овощами", 280, 20, 18, 6, 250,
+             "Яйца 3шт, Помидор 1шт, Перец 50г, Масло 1ч.л."),
+            ("breakfast", "Творог с бананом", 300, 25, 6, 38, 280,
+             "Творог 5% 180г, Банан 1шт, Корица"),
+            ("breakfast", "Сырники с ягодами", 340, 22, 12, 38, 270,
+             "Творог 5% 200г, Яйцо 1шт, Мука 30г, Ягоды 80г"),
+            ("breakfast", "Греческий йогурт с гранолой", 290, 18, 9, 36, 250,
+             "Йогурт греч. 200г, Гранола 40г, Ягоды 50г"),
+            # ОБЕДЫ
+            ("lunch", "Курица с гречкой и салатом", 480, 42, 12, 52, 400,
+             "Куриное филе 150г, Гречка 80г (сухая), Овощи 150г, Масло 1ч.л."),
+            ("lunch", "Рыба с рисом и овощами", 450, 38, 14, 48, 420,
+             "Треска 180г, Рис 70г (сухой), Брокколи 150г, Масло 1ч.л."),
+            ("lunch", "Индейка с булгуром", 470, 40, 13, 50, 410,
+             "Индейка 160г, Булгур 70г, Овощи 150г, Оливк. масло 1ч.л."),
+            ("lunch", "Говядина с картофелем", 520, 38, 18, 50, 450,
+             "Говядина 160г, Картофель 200г, Овощи 100г"),
+            ("lunch", "Паста с курицей", 500, 36, 14, 58, 400,
+             "Паста 70г (сухая), Курица 130г, Томатный соус 100г"),
+            # УЖИНЫ
+            ("dinner", "Стейк лосося с овощами", 420, 34, 22, 18, 350,
+             "Лосось 180г, Спаржа 100г, Кабачок 150г, Лимон"),
+            ("dinner", "Куриное филе с тушёными овощами", 380, 40, 10, 28, 400,
+             "Куриное филе 180г, Овощи 200г, Масло 1ч.л."),
+            ("dinner", "Творожная запеканка", 350, 30, 12, 30, 320,
+             "Творог 5% 200г, Яйцо 1шт, Овсянка 30г, Мёд 1ч.л."),
+            ("dinner", "Индейка с брокколи", 360, 38, 11, 22, 380,
+             "Индейка 180г, Брокколи 200г, Масло 1ч.л."),
+            ("dinner", "Омлет с шпинатом", 320, 26, 20, 8, 300,
+             "Яйца 3шт, Шпинат 100г, Сыр 20г"),
+        ]
+        c.executemany("""INSERT INTO dishes
+            (meal_type, name, base_calories, base_protein, base_fat, base_carbs, base_weight, ingredients)
+            VALUES (?,?,?,?,?,?,?,?)""", dishes)
+    conn.commit()
     conn.close()
-    return wd, wgd
+
+
+def get_dishes(meal_type):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("SELECT * FROM dishes WHERE meal_type=?", (meal_type,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def get_dish_by_name(name):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("SELECT * FROM dishes WHERE name=?", (name,))
+    row = c.fetchone()
+    conn.close()
+    return row
+
+
+# ===== ДНЕВНИК ЕДЫ =====
+
+def add_food_log(uid, meal_type, food_name, grams, cal, prot, fat, carb):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("""INSERT INTO food_log
+        (user_id, date, meal_type, food_name, grams, calories, protein, fat, carbs)
+        VALUES (?,?,?,?,?,?,?,?,?)""",
+        (uid, date.today().isoformat(), meal_type, food_name, grams, cal, prot, fat, carb))
+    conn.commit()
+    conn.close()
+
+
+def get_food_today(uid):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("""SELECT meal_type, food_name, grams, calories, protein, fat, carbs
+                 FROM food_log WHERE user_id=? AND date=?
+                 ORDER BY id""", (uid, date.today().isoformat()))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def get_food_totals_today(uid):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("""SELECT
+        COALESCE(SUM(calories),0),
+        COALESCE(SUM(protein),0),
+        COALESCE(SUM(fat),0),
+        COALESCE(SUM(carbs),0)
+        FROM food_log WHERE user_id=? AND date=?""",
+        (uid, date.today().isoformat()))
+    row = c.fetchone()
+    conn.close()
+    return {"calories": row[0], "protein": row[1], "fat": row[2], "carbs": row[3]}
+
+
+def clear_food_today(uid):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM food_log WHERE user_id=? AND date=?",
+              (uid, date.today().isoformat()))
+    conn.commit()
+    conn.close()
+
+
+# ===== ЛИЧНЫЕ ПРОДУКТЫ =====
+
+def add_user_food(uid, name, cal, prot, fat, carb):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("""INSERT INTO user_foods
+        (user_id, name, per100_cal, per100_prot, per100_fat, per100_carb)
+        VALUES (?,?,?,?,?,?)""", (uid, name, cal, prot, fat, carb))
+    conn.commit()
+    conn.close()
+
+
+def get_user_foods(uid):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("""SELECT name, per100_cal, per100_prot, per100_fat, per100_carb
+                 FROM user_foods WHERE user_id=? ORDER BY name""", (uid,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+def find_food(uid, query):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    q = f"%{query.lower()}%"
+    c.execute("""SELECT name, per100_cal, per100_prot, per100_fat, per100_carb
+                 FROM user_foods WHERE user_id=? AND LOWER(name) LIKE ?""", (uid, q))
+    user_rows = c.fetchall()
+    conn.close()
+    return user_rows

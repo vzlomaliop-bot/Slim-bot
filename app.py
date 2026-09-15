@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from datetime import date
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
@@ -340,9 +341,8 @@ async def save_measure(msg: Message, state: FSMContext):
 @dp.message(F.text == "📊 Прогресс")
 async def progress(msg: Message):
     user = get_user(msg.from_user.id)
-    fasted = get_weights(msg.from_user.id, "fasted", 14)
+    fasted = get_weights(msg.from_user.id, "fasted", 30)
     last_fed = get_last_weight(msg.from_user.id, "fed")
-    wd, wgd = get_days_active(msg.from_user.id)
 
     lines = ["📊 **Твой прогресс**\n"]
 
@@ -366,8 +366,33 @@ async def progress(msg: Message):
         lines.append(f"🌙 Перед сном: {last_fed[0]}: {last_fed[1]} кг")
         lines.append("")
 
-    lines.append(f"💧 Дней с водой: {wd}")
-    lines.append(f"⚖️ Дней с весом: {wgd}")
+    if len(fasted) >= 2:
+        try:
+            first_d, first_w = fasted[0]
+            last_d, last_w = fasted[-1]
+            d1 = date.fromisoformat(first_d)
+            d2 = date.fromisoformat(last_d)
+            days = (d2 - d1).days
+            if days > 0:
+                diff = round(first_w - last_w, 2)
+                per_week = round(diff / days * 7, 2)
+                if diff > 0:
+                    lines.append(f"📉 Тренд: {per_week:+.2f} кг/нед — худеешь!")
+                elif diff < 0:
+                    lines.append(f"📈 Тренд: {per_week:+.2f} кг/нед — вес растёт")
+                else:
+                    lines.append(f"➖ Тренд: 0 кг/нед — держишься")
+
+                if per_week > 0 and user:
+                    left_now = user["current_weight"] - user["goal_weight"]
+                    if left_now > 0:
+                        weeks = left_now / per_week
+                        if weeks < 52:
+                            lines.append(f"🎯 Прогноз: ~{int(weeks)} нед до цели")
+                        else:
+                            lines.append("🎯 При таком темпе цель далеко — ускорься")
+        except Exception:
+            pass
 
     await msg.answer("\n".join(lines), reply_markup=main_menu(), parse_mode="Markdown")
 
@@ -399,7 +424,7 @@ async def help_cmd(msg: Message):
         "💧 **Выпить воды** — отмечай, сколько выпил\n"
         "⚖️ **Записать вес** — натощак утром + перед сном вечером\n"
         "📏 **Замеры** — раз в неделю\n"
-        "📊 **Прогресс** — динамика\n\n"
+        "📊 **Прогресс** — динамика, тренд, прогноз\n\n"
         "Команды: /start, /help",
         reply_markup=main_menu(),
         parse_mode="Markdown",

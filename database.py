@@ -33,7 +33,8 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         date TEXT,
-        weight REAL
+        weight REAL,
+        weigh_type TEXT DEFAULT 'fasted'
     )""")
     c.execute("""CREATE TABLE IF NOT EXISTS measurements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +42,10 @@ def init_db():
         date TEXT,
         neck REAL, chest REAL, waist REAL, hips REAL, arm REAL
     )""")
+    try:
+        c.execute("ALTER TABLE weights ADD COLUMN weigh_type TEXT DEFAULT 'fasted'")
+    except:
+        pass
     conn.commit()
     conn.close()
 
@@ -99,26 +104,40 @@ def get_water_today(uid):
     return total
 
 
-def add_weight(uid, weight):
+def add_weight(uid, weight, weigh_type="fasted"):
     conn = sqlite3.connect("slim.db")
     c = conn.cursor()
     today = date.today().isoformat()
-    c.execute("DELETE FROM weights WHERE user_id=? AND date=?", (uid, today))
-    c.execute("INSERT INTO weights (user_id, date, weight) VALUES (?,?,?)",
-              (uid, today, weight))
-    c.execute("UPDATE users SET current_weight=? WHERE user_id=?", (weight, uid))
+    c.execute("DELETE FROM weights WHERE user_id=? AND date=? AND weigh_type=?",
+              (uid, today, weigh_type))
+    c.execute("INSERT INTO weights (user_id, date, weight, weigh_type) VALUES (?,?,?,?)",
+              (uid, today, weight, weigh_type))
+    if weigh_type == "fasted":
+        c.execute("UPDATE users SET current_weight=? WHERE user_id=?", (weight, uid))
     conn.commit()
     conn.close()
 
 
-def get_weights(uid, limit=30):
+def get_weights(uid, weigh_type="fasted", limit=30):
     conn = sqlite3.connect("slim.db")
     c = conn.cursor()
-    c.execute("SELECT date, weight FROM weights WHERE user_id=? ORDER BY date DESC LIMIT ?",
-              (uid, limit))
+    c.execute("""SELECT date, weight FROM weights
+                 WHERE user_id=? AND weigh_type=?
+                 ORDER BY date DESC LIMIT ?""", (uid, weigh_type, limit))
     rows = c.fetchall()
     conn.close()
     return list(reversed(rows))
+
+
+def get_last_weight(uid, weigh_type="fed"):
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("""SELECT date, weight FROM weights
+                 WHERE user_id=? AND weigh_type=?
+                 ORDER BY id DESC LIMIT 1""", (uid, weigh_type))
+    row = c.fetchone()
+    conn.close()
+    return row
 
 
 def add_measurement(uid, neck, chest, waist, hips, arm):

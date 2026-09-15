@@ -1,5 +1,6 @@
 from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton,
+    InlineKeyboardMarkup, InlineKeyboardButton,
 )
 
 
@@ -84,12 +85,23 @@ def dishes_kb(dishes):
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
+def dish_preview_kb(meal_type):
+    """Inline-кнопки под предпросмотром блюда."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📝 В дневник", callback_data=f"add_dish_{meal_type}"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_dish"),
+        ],
+    ])
+
+
 def diary_menu_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🍳 Завтрак"), KeyboardButton(text="🍲 Обед")],
             [KeyboardButton(text="🍽 Ужин"), KeyboardButton(text="🍎 Перекус")],
             [KeyboardButton(text="📋 Что я съел сегодня")],
+            [KeyboardButton(text="↩️ Удалить последнее")],
             [KeyboardButton(text="🗑 Очистить день")],
             [KeyboardButton(text="⬅️ В меню")],
         ],
@@ -97,14 +109,14 @@ def diary_menu_kb():
     )
 
 
-def diary_back_kb():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="⬅️ К дневнику")],
-            [KeyboardButton(text="⬅️ В меню")],
+def confirm_cancel_kb():
+    """Inline-кнопки подтверждения/отмены для ручного ввода."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Добавить", callback_data="confirm_add"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_add"),
         ],
-        resize_keyboard=True,
-    )
+    ])
 
 
 def charts_menu_kb():
@@ -117,4 +129,3 @@ def charts_menu_kb():
         ],
         resize_keyboard=True,
     )
-  

@@ -1,12 +1,13 @@
 import asyncio
 import logging
-from datetime import date
+import os
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
+    ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove,
 )
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -18,7 +19,6 @@ from database import (
 )
 
 logging.basicConfig(level=logging.INFO)
-import os
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -38,61 +38,62 @@ class Actions(StatesGroup):
     entering_measurements = State()
 
 
-# ---------- Расчёт калорий ----------
 def calc_calories(gender, age, height, weight, activity):
-    # Mifflin-St Jeor
     if gender == "m":
         bmr = 10 * weight + 6.25 * height - 5 * age + 5
     else:
         bmr = 10 * weight + 6.25 * height - 5 * age - 161
     k = {"low": 1.2, "mid": 1.375, "high": 1.55}.get(activity, 1.375)
-    tdee = bmr * k
-    return int(tdee - 500)  # дефицит 500 ккал = ~0.5 кг/нед
+    return int(bmr * k - 500)
 
 
-# ---------- Клавиатуры ----------
 def main_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💧 Выпить воды", callback_data="water_menu")],
-        [InlineKeyboardButton(text="⚖️ Записать вес", callback_data="log_weight")],
-        [InlineKeyboardButton(text="📏 Замеры", callback_data="measure_menu")],
-        [InlineKeyboardButton(text="📊 Прогресс", callback_data="progress")],
-        [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
-    ])
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="💧 Выпить воды")],
+            [KeyboardButton(text="⚖️ Записать вес")],
+            [KeyboardButton(text="📏 Замеры")],
+            [KeyboardButton(text="📊 Прогресс")],
+            [KeyboardButton(text="👤 Профиль")],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
 
 
 def water_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="+250 мл", callback_data="w_250"),
-         InlineKeyboardButton(text="+500 мл", callback_data="w_500")],
-        [InlineKeyboardButton(text="+750 мл", callback_data="w_750"),
-         InlineKeyboardButton(text="+1000 мл", callback_data="w_1000")],
-        [InlineKeyboardButton(text="⬅️ В меню", callback_data="back_main")],
-    ])
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="+250 мл"), KeyboardButton(text="+500 мл")],
+            [KeyboardButton(text="+750 мл"), KeyboardButton(text="+1000 мл")],
+            [KeyboardButton(text="⬅️ В меню")],
+        ],
+        resize_keyboard=True,
+    )
 
 
 def onboard_gender_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👨 Мужской", callback_data="g_m")],
-        [InlineKeyboardButton(text="👩 Женский", callback_data="g_f")],
-    ])
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="👨 Мужской"), KeyboardButton(text="👩 Женский")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
 
 
 def onboard_activity_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🪑 Малоподвижный", callback_data="a_low")],
-        [InlineKeyboardButton(text="🚶 Средний (3-4 трен/нед)", callback_data="a_mid")],
-        [InlineKeyboardButton(text="🏃 Высокий (5+ трен/нед)", callback_data="a_high")],
-    ])
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🪑 Малоподвижный")],
+            [KeyboardButton(text="🚶 Средний (3-4 трен/нед)")],
+            [KeyboardButton(text="🏃 Высокий (5+ трен/нед)")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
 
 
-def back_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ В меню", callback_data="back_main")]
-    ])
-
-
-# ---------- /start ----------
 @dp.message(Command("start"))
 async def start(msg: Message, state: FSMContext):
     await state.clear()
@@ -100,15 +101,16 @@ async def start(msg: Message, state: FSMContext):
     if user:
         await msg.answer(
             f"Привет, {msg.from_user.first_name}! 👋\n\n"
-            f"Твоя цель: {user['start_weight']} → {user['goal_weight']} кг\n"
-            f"Норма: {user['daily_calories']} ккал/день, вода {user['daily_water']} мл\n\n"
+            f"🎯 Цель: {user['start_weight']} → {user['goal_weight']} кг\n"
+            f"🍽 Норма: {user['daily_calories']} ккал/день\n"
+            f"💧 Вода: {user['daily_water']} мл/день\n\n"
             f"Что делаем?",
             reply_markup=main_menu(),
         )
     else:
         await msg.answer(
-            "Привет! 👋 Я помогу тебе сбросить вес без нервов — с водой, замерами и трекингом прогресса.\n\n"
-            "Ответь на несколько вопросов, чтобы я рассчитал твою норму.\n\n"
+            "Привет! 👋 Я помогу тебе сбросить вес без нервов.\n\n"
+            "Ответь на 6 вопросов — я рассчитаю твою норму.\n\n"
             "**1. Твой пол?**",
             reply_markup=onboard_gender_kb(),
             parse_mode="Markdown",
@@ -116,11 +118,15 @@ async def start(msg: Message, state: FSMContext):
         await state.set_state(Onboard.gender)
 
 
-@dp.callback_query(Onboard.gender, F.data.startswith("g_"))
-async def ob_gender(call: CallbackQuery, state: FSMContext):
-    gender = call.data.split("_")[1]
+@dp.message(Onboard.gender, F.text.in_(["👨 Мужской", "👩 Женский"]))
+async def ob_gender(msg: Message, state: FSMContext):
+    gender = "m" if "Мужской" in msg.text else "f"
     await state.update_data(gender=gender)
-    await call.message.edit_text("**2. Сколько тебе лет?** (число)\nНапример: `28`", parse_mode="Markdown")
+    await msg.answer(
+        "**2. Сколько тебе лет?**\nНапример: `18`",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="Markdown",
+    )
     await state.set_state(Onboard.age)
 
 
@@ -133,7 +139,7 @@ async def ob_age(msg: Message, state: FSMContext):
         await msg.answer("Введи число от 10 до 100.")
         return
     await state.update_data(age=age)
-    await msg.answer("**3. Твой рост в см?**\nНапример: `178`", parse_mode="Markdown")
+    await msg.answer("**3. Твой рост в см?**\nНапример: `173`", parse_mode="Markdown")
     await state.set_state(Onboard.height)
 
 
@@ -146,7 +152,7 @@ async def ob_height(msg: Message, state: FSMContext):
         await msg.answer("Введи рост в см (100-250).")
         return
     await state.update_data(height=h)
-    await msg.answer("**4. Текущий вес в кг?**\nНапример: `92.5`", parse_mode="Markdown")
+    await msg.answer("**4. Текущий вес в кг?**\nНапример: `75.2`", parse_mode="Markdown")
     await state.set_state(Onboard.weight)
 
 
@@ -156,10 +162,10 @@ async def ob_weight(msg: Message, state: FSMContext):
         w = float(msg.text.replace(",", ".").strip())
         assert 30 <= w <= 300
     except:
-        await msg.answer("Введи вес в кг (например 92.5).")
+        await msg.answer("Введи вес в кг (например 75.2).")
         return
     await state.update_data(start_weight=w)
-    await msg.answer("**5. Целевой вес в кг?**\nНапример: `80`", parse_mode="Markdown")
+    await msg.answer("**5. Целевой вес в кг?**\nНапример: `65`", parse_mode="Markdown")
     await state.set_state(Onboard.goal)
 
 
@@ -173,23 +179,32 @@ async def ob_goal(msg: Message, state: FSMContext):
         await msg.answer("Цель должна быть меньше текущего веса.")
         return
     await state.update_data(goal_weight=g)
-    await msg.answer("**6. Уровень активности?**", reply_markup=onboard_activity_kb(), parse_mode="Markdown")
+    await msg.answer(
+        "**6. Уровень активности?**",
+        reply_markup=onboard_activity_kb(),
+        parse_mode="Markdown",
+    )
     await state.set_state(Onboard.activity)
 
 
-@dp.callback_query(Onboard.activity, F.data.startswith("a_"))
-async def ob_activity(call: CallbackQuery, state: FSMContext):
-    act = call.data.split("_")[1]
+@dp.message(Onboard.activity, F.text.in_(["🪑 Малоподвижный", "🚶 Средний (3-4 трен/нед)", "🏃 Высокий (5+ трен/нед)"]))
+async def ob_activity(msg: Message, state: FSMContext):
+    if "Малоподвижный" in msg.text:
+        act = "low"
+    elif "Средний" in msg.text:
+        act = "mid"
+    else:
+        act = "high"
     data = await state.get_data()
     data["activity"] = act
-    data["username"] = call.from_user.username
+    data["username"] = msg.from_user.username
     data["daily_calories"] = calc_calories(
         data["gender"], data["age"], data["height"],
         data["start_weight"], act,
     )
-    create_user(call.from_user.id, data)
+    create_user(msg.from_user.id, data)
     await state.clear()
-    await call.message.edit_text(
+    await msg.answer(
         f"✅ Готово!\n\n"
         f"🎯 Цель: {data['start_weight']} → {data['goal_weight']} кг\n"
         f"🍽 Норма: ~{data['daily_calories']} ккал/день\n"
@@ -199,48 +214,49 @@ async def ob_activity(call: CallbackQuery, state: FSMContext):
     )
 
 
-# ---------- Главное меню ----------
-@dp.callback_query(F.data == "back_main")
-async def back_main(call: CallbackQuery, state: FSMContext):
+@dp.message(F.text == "⬅️ В меню")
+async def back_main(msg: Message, state: FSMContext):
     await state.clear()
-    await call.message.edit_text("Главное меню:", reply_markup=main_menu())
+    await msg.answer("Главное меню:", reply_markup=main_menu())
 
 
-# ---------- Вода ----------
-@dp.callback_query(F.data == "water_menu")
-async def water_menu(call: CallbackQuery):
-    user = get_user(call.from_user.id)
-    total = get_water_today(call.from_user.id)
+@dp.message(F.text == "💧 Выпить воды")
+async def water_menu(msg: Message):
+    user = get_user(msg.from_user.id)
+    total = get_water_today(msg.from_user.id)
     goal = user["daily_water"] if user else 2500
     pct = min(100, int(total / goal * 100))
     bar = "▰" * (pct // 10) + "▱" * (10 - pct // 10)
-    await call.message.edit_text(
+    await msg.answer(
         f"💧 **Вода**\n\n{bar} {pct}%\n{total} мл из {goal} мл\n\nСколько выпил?",
         reply_markup=water_kb(),
         parse_mode="Markdown",
     )
 
 
-@dp.callback_query(F.data.startswith("w_"))
-async def add_water_cb(call: CallbackQuery):
-    ml = int(call.data.split("_")[1])
-    add_water(call.from_user.id, ml)
-    user = get_user(call.from_user.id)
-    total = get_water_today(call.from_user.id)
+@dp.message(F.text.in_(["+250 мл", "+500 мл", "+750 мл", "+1000 мл"]))
+async def add_water_cb(msg: Message):
+    ml = int(msg.text.replace("+", "").replace(" мл", "").strip())
+    add_water(msg.from_user.id, ml)
+    user = get_user(msg.from_user.id)
+    total = get_water_today(msg.from_user.id)
     goal = user["daily_water"] if user else 2500
     pct = min(100, int(total / goal * 100))
     bar = "▰" * (pct // 10) + "▱" * (10 - pct // 10)
     suffix = " 🎉 Цель достигнута!" if total >= goal else ""
-    await call.message.edit_text(
+    await msg.answer(
         f"✅ +{ml} мл\n\n{bar} {pct}%\n{total} мл из {goal} мл{suffix}",
         reply_markup=water_kb(),
     )
 
 
-# ---------- Вес ----------
-@dp.callback_query(F.data == "log_weight")
-async def log_weight(call: CallbackQuery, state: FSMContext):
-    await call.message.edit_text("⚖️ Введи свой вес в кг (например `91.8`):", parse_mode="Markdown")
+@dp.message(F.text == "⚖️ Записать вес")
+async def log_weight(msg: Message, state: FSMContext):
+    await msg.answer(
+        "⚖️ Введи свой вес в кг (например `74.8`):",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="Markdown",
+    )
     await state.set_state(Actions.entering_weight)
 
 
@@ -250,7 +266,7 @@ async def save_weight(msg: Message, state: FSMContext):
         w = float(msg.text.replace(",", ".").strip())
         assert 30 <= w <= 300
     except:
-        await msg.answer("Введи число (например 91.8).")
+        await msg.answer("Введи число (например 74.8).")
         return
     add_weight(msg.from_user.id, w)
     user = get_user(msg.from_user.id)
@@ -263,13 +279,13 @@ async def save_weight(msg: Message, state: FSMContext):
     )
 
 
-# ---------- Замеры ----------
-@dp.callback_query(F.data == "measure_menu")
-async def measure_menu(call: CallbackQuery, state: FSMContext):
-    await call.message.edit_text(
+@dp.message(F.text == "📏 Замеры")
+async def measure_menu(msg: Message, state: FSMContext):
+    await msg.answer(
         "📏 Введи обхваты через пробел (в см):\n\n"
         "**шея грудь талия бёдра рука**\n\n"
         "Например: `38 100 92 98 32`",
+        reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown",
     )
     await state.set_state(Actions.entering_measurements)
@@ -292,12 +308,11 @@ async def save_measure(msg: Message, state: FSMContext):
     )
 
 
-# ---------- Прогресс ----------
-@dp.callback_query(F.data == "progress")
-async def progress(call: CallbackQuery):
-    user = get_user(call.from_user.id)
-    weights = get_weights(call.from_user.id, 10)
-    wd, wgd = get_days_active(call.from_user.id)
+@dp.message(F.text == "📊 Прогресс")
+async def progress(msg: Message):
+    user = get_user(msg.from_user.id)
+    weights = get_weights(msg.from_user.id, 10)
+    wd, wgd = get_days_active(msg.from_user.id)
 
     lines = ["📊 **Твой прогресс**\n"]
     if user:
@@ -315,17 +330,16 @@ async def progress(call: CallbackQuery):
         for d, w in weights[-7:]:
             lines.append(f"• {d}: {w} кг")
 
-    await call.message.edit_text("\n".join(lines), reply_markup=back_kb(), parse_mode="Markdown")
+    await msg.answer("\n".join(lines), reply_markup=main_menu(), parse_mode="Markdown")
 
 
-# ---------- Профиль ----------
-@dp.callback_query(F.data == "profile")
-async def profile(call: CallbackQuery):
-    user = get_user(call.from_user.id)
+@dp.message(F.text == "👤 Профиль")
+async def profile(msg: Message):
+    user = get_user(msg.from_user.id)
     if not user:
-        await call.message.edit_text("Сначала /start", reply_markup=back_kb())
+        await msg.answer("Сначала /start", reply_markup=main_menu())
         return
-    await call.message.edit_text(
+    await msg.answer(
         f"👤 **Профиль**\n\n"
         f"Пол: {'М' if user['gender'] == 'm' else 'Ж'}\n"
         f"Возраст: {user['age']}\n"
@@ -334,7 +348,7 @@ async def profile(call: CallbackQuery):
         f"Цель: {user['goal_weight']} кг\n"
         f"Норма: {user['daily_calories']} ккал/день\n"
         f"Вода: {user['daily_water']} мл/день",
-        reply_markup=back_kb(),
+        reply_markup=main_menu(),
         parse_mode="Markdown",
     )
 
@@ -342,15 +356,13 @@ async def profile(call: CallbackQuery):
 @dp.message(Command("help"))
 async def help_cmd(msg: Message):
     await msg.answer(
-        "**Как пользоваться ботом:**\n\n"
-        "💧 **Вода** — жми кнопку и отмечай, сколько выпил\n"
+        "**Как пользоваться:**\n\n"
+        "💧 **Выпить воды** — отмечай, сколько выпил\n"
         "⚖️ **Вес** — записывай каждое утро\n"
-        "📏 **Замеры** — раз в неделю (шея, грудь, талия, бёдра, рука)\n"
-        "📊 **Прогресс** — смотри, как уходит вес\n\n"
-        "Команды:\n"
-        "/start — главное меню\n"
-        "/progress — прогресс\n"
-        "/help — эта справка",
+        "📏 **Замеры** — раз в неделю\n"
+        "📊 **Прогресс** — динамика\n\n"
+        "Команды: /start, /help",
+        reply_markup=main_menu(),
         parse_mode="Markdown",
     )
 

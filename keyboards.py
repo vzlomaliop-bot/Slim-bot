@@ -129,3 +129,21 @@ def charts_menu_kb():
         ],
         resize_keyboard=True,
     )
+def settings_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="💧 Время воды"), KeyboardButton(text="⚖️ Время веса")],
+            [KeyboardButton(text="🔔 Вкл/выкл воду"), KeyboardButton(text="🔔 Вкл/выкл вес")],
+            [KeyboardButton(text="⬅️ В меню")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def settings_back_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="⬅️ Назад")],
+        ],
+        resize_keyboard=True,
+    )

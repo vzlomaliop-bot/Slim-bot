@@ -1,20 +1,17 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
 
 from database import (
     get_user, get_dishes, get_dish_by_name,
     add_food_log, get_food_totals_today,
 )
 from keyboards import (
-    main_menu, meals_menu_kb, dishes_kb, dish_preview_kb, diary_menu_kb,
+    main_menu, meals_menu_kb, dishes_kb, dish_preview_kb,
 )
 from meals_data import scale_dish
 
 router = Router()
 
-
-# Храним последнее выбранное блюдо для каждого пользователя (в памяти)
 _last_dish = {}
 
 
@@ -39,6 +36,12 @@ async def lunch(msg: Message):
 async def dinner(msg: Message):
     dishes = get_dishes("dinner")
     await msg.answer("Варианты ужина:", reply_markup=dishes_kb(dishes))
+
+
+@router.message(F.text == "⬅️ Назад")
+async def dishes_back(msg: Message):
+    """Возврат в меню выбора приёма пищи."""
+    await msg.answer("Выбери приём пищи:", reply_markup=meals_menu_kb())
 
 
 @router.message(F.text.regexp(r"^[А-ЯЁа-яё].+$"))

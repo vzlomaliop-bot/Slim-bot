@@ -16,6 +16,7 @@ router = Router()
 
 class DiaryStates(StatesGroup):
     entering_food = State()
+    entering_macros = State()
     entering_grams = State()
 
 
@@ -34,55 +35,54 @@ async def diary_menu(msg: Message):
 
 @router.message(F.text.in_(list(MEAL_MAP.keys())))
 async def diary_choose_meal(msg: Message, state: FSMContext):
-    # Если пользователь не начинал дневник — не реагируем (это меню "Меню" блюда).
-    # Проверка: у пользователя должен быть активный диалог.
-    # Различить сложно, поэтому используем текущее состояние.
     current = await state.get_state()
-
-    # Пользователь только что нажал "📝 Дневник еды" → должен быть выбор блюда.
-    # Если состояние не пустое и ожидает ввода граммов — обработаем ниже в diary_enter_grams.
-    if current == DiaryStates.entering_grams:
-        # Пользователь вместо граммов нажал на приём пищи — игнорируем
-        await msg.answer("Сейчас введи граммы числом, например 150.")
+    if current == DiaryStates.entering_grams or current == DiaryStates.entering_macros:
+        await msg.answer("Сейчас введи данные, как просил бот, или нажми ⬅️ Назад.")
         return
 
     meal_type, meal_label = MEAL_MAP[msg.text]
     await state.update_data(meal_type=meal_type, meal_label=meal_label)
     await msg.answer(
         f"**{meal_label}**\n\n"
-        "Введи продукт в формате:\n"
-        "`Название / ккал на 100г / белки / жиры / углеводы`\n\n"
-        "Например: `Курица / 165 / 31 / 3.6 / 0`",
+        "Введи **БЖУ продукта на 100 г** через пробел:\n"
+        "`белки жиры углеводы`\n\n"
+        "Например, для курицы: `31 3.6 0`\n"
+        "Для гречки: `12.6 3.3 62`\n"
+        "Для яйца: `13 11 1`\n\n"
+        "Нажми ⬅️ В меню чтобы отменить.",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown",
     )
-    await state.set_state(DiaryStates.entering_food)
+    await state.set_state(DiaryStates.entering_macros)
 
 
-@router.message(DiaryStates.entering_food)
-async def diary_enter_food(msg: Message, state: FSMContext):
-    # Отмена
+@router.message(DiaryStates.entering_macros)
+async def diary_enter_macros(msg: Message, state: FSMContext):
     if msg.text in ("⬅️ В меню", "⬅️ К дневнику"):
         await state.clear()
         await msg.answer("Отменено.", reply_markup=diary_menu_kb())
         return
 
     try:
-        parts = msg.text.split("/")
-        name = parts[0].strip()
-        cal100, prot100, fat100, carb100 = [float(x.strip().replace(",", ".")) for x in parts[1:5]]
-    except Exception:
+        parts = msg.text.replace(",", ".").split()
+        prot, fat, carb = [float(x) for x in parts[:3]]
+        assert 0 <= prot <= 100 and 0 <= fat <= 100 and 0 <= carb <= 100
+    except:
         await msg.answer(
-            "Формат: `Название / ккал_100 / белки / жиры / углеводы`\n\n"
-            "Или нажми ⬅️ В меню чтобы отменить.",
+            "Формат: `белки жиры углеводы` через пробел.\n"
+            "Например: `31 3.6 0`",
             parse_mode="Markdown",
         )
         return
-    await state.update_data(name=name, cal100=cal100, prot100=prot100,
-                            fat100=fat100, carb100=carb100)
+
+    cal_per100 = round(4 * prot + 9 * fat + 4 * carb, 1)
+    await state.update_data(prot100=prot, fat100=fat, carb100=carb,
+                            cal100=cal_per100)
     await msg.answer(
-        f"Сколько грамм **{name}**?\nНапример: `150`\n\n"
-        f"Или нажми ⬅️ В меню чтобы отменить.",
+        f"✅ БЖУ сохранено:\n"
+        f"Б: {prot} г, Ж: {fat} г, У: {carb} г\n"
+        f"Калорийность: **~{cal_per100} ккал / 100 г**\n\n"
+        f"Теперь введи **граммы** порции. Например: `150`",
         parse_mode="Markdown",
     )
     await state.set_state(DiaryStates.entering_grams)
@@ -109,7 +109,6 @@ async def diary_enter_grams(msg: Message, state: FSMContext):
     fat = round(data["fat100"] * k, 1)
     carb = round(data["carb100"] * k, 1)
 
-    # Сохраняем в state данные для подтверждения
     await state.update_data(
         pending_grams=grams, pending_cal=cal, pending_prot=prot,
         pending_fat=fat, pending_carb=carb,
@@ -117,7 +116,7 @@ async def diary_enter_grams(msg: Message, state: FSMContext):
 
     await msg.answer(
         f"🔎 **Предпросмотр**\n\n"
-        f"**{data['name']}** — {grams} г\n\n"
+        f"Своё блюдо — {grams} г\n\n"
         f"🔥 {cal} ккал\n"
         f"🥩 Б: {prot} г\n"
         f"🥑 Ж: {fat} г\n"
@@ -136,7 +135,7 @@ async def confirm_add(call: CallbackQuery, state: FSMContext):
         return
 
     add_food_log(
-        call.from_user.id, data["meal_type"], data["name"],
+        call.from_user.id, data["meal_type"], "Своё блюдо",
         data["pending_grams"], data["pending_cal"], data["pending_prot"],
         data["pending_fat"], data["pending_carb"],
     )
@@ -147,7 +146,7 @@ async def confirm_add(call: CallbackQuery, state: FSMContext):
     left = user["daily_calories"] - totals["calories"]
 
     await call.message.edit_text(
-        f"✅ Добавлено: **{data['name']}** {data['pending_grams']}г\n"
+        f"✅ Добавлено: **Своё блюдо** {data['pending_grams']} г\n"
         f"🔥 {data['pending_cal']} ккал | 🥩 {data['pending_prot']} | "
         f"🥑 {data['pending_fat']} | 🍚 {data['pending_carb']}\n\n"
         f"**За сегодня:** {int(totals['calories'])} / {user['daily_calories']} ккал\n"

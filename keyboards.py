@@ -21,9 +21,6 @@ def main_menu():
         resize_keyboard=True,
         is_persistent=True,
     )
-        resize_keyboard=True,
-        is_persistent=True,
-    )
 
 
 def water_kb():
@@ -90,7 +87,6 @@ def dishes_kb(dishes):
 
 
 def dish_preview_kb(meal_type):
-    """Inline-кнопки под предпросмотром блюда."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="📝 В дневник", callback_data=f"add_dish_{meal_type}"),
@@ -114,7 +110,6 @@ def diary_menu_kb():
 
 
 def confirm_cancel_kb():
-    """Inline-кнопки подтверждения/отмены для ручного ввода."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="✅ Добавить", callback_data="confirm_add"),
@@ -133,6 +128,8 @@ def charts_menu_kb():
         ],
         resize_keyboard=True,
     )
+
+
 def settings_kb():
     return ReplyKeyboardMarkup(
         keyboard=[

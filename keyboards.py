@@ -15,8 +15,12 @@ def main_menu():
             [KeyboardButton(text="📏 Замеры")],
             [KeyboardButton(text="📊 Прогресс")],
             [KeyboardButton(text="📈 График")],
+            [KeyboardButton(text="⚙️ Настройки")],
             [KeyboardButton(text="👤 Профиль")],
         ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
         resize_keyboard=True,
         is_persistent=True,
     )

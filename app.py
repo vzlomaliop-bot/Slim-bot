@@ -71,7 +71,7 @@ async def help_cmd(msg: Message):
         "📈 **График** — визуализация веса\n"
         "⚙️ **Настройки** — своё время напоминаний о воде и весе\n\n"
         "Команды: /start_menu, /help",
-        reply_mark()`up есть=main_menu(),
+        reply_markup=main_menu(),
         parse_mode="Markdown",
     )
 

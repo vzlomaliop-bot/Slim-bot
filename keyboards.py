@@ -72,6 +72,7 @@ def meals_menu_kb():
         keyboard=[
             [KeyboardButton(text="🍳 Завтрак"), KeyboardButton(text="🍲 Обед")],
             [KeyboardButton(text="🍽 Ужин")],
+            [KeyboardButton(text="✏️ Своё блюдо")],
             [KeyboardButton(text="⬅️ В меню")],
         ],
         resize_keyboard=True,
@@ -82,6 +83,7 @@ def dishes_kb(dishes):
     rows = []
     for d in dishes:
         rows.append([KeyboardButton(text=f"{d[2]}")])
+    rows.append([KeyboardButton(text="✏️ Своё блюдо")])
     rows.append([KeyboardButton(text="⬅️ Назад")])
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
@@ -98,8 +100,8 @@ def dish_preview_kb(meal_type):
 def diary_menu_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🍳 Завтрак"), KeyboardButton(text="🍲 Обед")],
-            [KeyboardButton(text="🍽 Ужин"), KeyboardButton(text="🍎 Перекус")],
+            [KeyboardButton(text="📝 Завтрак"), KeyboardButton(text="📝 Обед")],
+            [KeyboardButton(text="📝 Ужин"), KeyboardButton(text="📝 Перекус")],
             [KeyboardButton(text="📋 Что я съел сегодня")],
             [KeyboardButton(text="↩️ Удалить последнее")],
             [KeyboardButton(text="🗑 Очистить день")],

@@ -6,13 +6,11 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from database import (
-    init_db, init_dishes, get_user,
-)
+from database import init_db, init_dishes, get_user
 from keyboards import main_menu
 from scheduler import setup_scheduler
 from handlers import (
-    onboarding, water, weight, progress, meals, diary, workouts,
+    onboarding, water, weight, progress, meals, diary, workouts, settings,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +26,7 @@ dp.include_router(weight.router)
 dp.include_router(meals.router)
 dp.include_router(diary.router)
 dp.include_router(workouts.router)
+dp.include_router(settings.router)
 dp.include_router(progress.router)
 
 
@@ -62,16 +61,17 @@ async def profile(msg: Message):
 async def help_cmd(msg: Message):
     await msg.answer(
         "**Как пользоваться:**\n\n"
-        "💧 **Выпить воды** — отмечай, сколько выпил\n"
-        "🍽 **Меню** — варианты завтрака/обеда/ужина под твою норму\n"
-        "📝 **Дневник еды** — считай калории за день\n"
+        "💧 **Выпить воды** — трекер воды\n"
+        "🍽 **Меню** — простые блюда под твою норму\n"
+        "📝 **Дневник еды** — считай калории\n"
         "🔥 **Тренировка** — жиросжигающие комплексы\n"
         "⚖️ **Записать вес** — натощак утром + перед сном\n"
         "📏 **Замеры** — раз в неделю\n"
         "📊 **Прогресс** — динамика и прогноз\n"
-        "📈 **График** — визуализация веса\n\n"
-        "Команды: /start, /help",
-        reply_markup=main_menu(),
+        "📈 **График** — визуализация веса\n"
+        "⚙️ **Настройки** — своё время напоминаний о воде и весе\n\n"
+        "Команды: /start_menu, /help",
+        reply_mark()`up есть=main_menu(),
         parse_mode="Markdown",
     )
 
@@ -80,7 +80,6 @@ async def main():
     init_db()
     init_dishes()
 
-    # Планировщик напоминаний
     try:
         setup_scheduler(bot)
         logging.info("Scheduler started")

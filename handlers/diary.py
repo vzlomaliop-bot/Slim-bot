@@ -15,7 +15,6 @@ router = Router()
 
 
 class DiaryStates(StatesGroup):
-    entering_food = State()
     entering_macros = State()
     entering_grams = State()
 
@@ -30,14 +29,25 @@ MEAL_MAP = {
 
 @router.message(F.text == "📝 Дневник еды")
 async def diary_menu(msg: Message):
-    await msg.answer("Что делаем?", reply_markup=diary_menu_kb())
+    await msg.answer(
+        "**Дневник еды**\n\n"
+        "Выбери приём пищи — бот попросит БЖУ продукта на 100 г.\n\n"
+        "**Как вводить своё блюдо:**\n"
+        "1. Жми на приём пищи (Завтрак / Обед / Ужин / Перекус)\n"
+        "2. Введи БЖУ через пробел: `31 3.6 0` (белки / жиры / углеводы)\n"
+        "3. Введи граммы порции: `150`\n"
+        "4. Подтверди в предпросмотре\n\n"
+        "Калории бот считает сам.",
+        reply_markup=diary_menu_kb(),
+        parse_mode="Markdown",
+    )
 
 
 @router.message(F.text.in_(list(MEAL_MAP.keys())))
 async def diary_choose_meal(msg: Message, state: FSMContext):
     current = await state.get_state()
-    if current == DiaryStates.entering_grams or current == DiaryStates.entering_macros:
-        await msg.answer("Сейчас введи данные, как просил бот, или нажми ⬅️ Назад.")
+    if current in (DiaryStates.entering_macros, DiaryStates.entering_grams):
+        await msg.answer("Сейчас введи данные, как просил бот, или нажми ⬅️ В меню.")
         return
 
     meal_type, meal_label = MEAL_MAP[msg.text]
@@ -48,8 +58,7 @@ async def diary_choose_meal(msg: Message, state: FSMContext):
         "`белки жиры углеводы`\n\n"
         "Например, для курицы: `31 3.6 0`\n"
         "Для гречки: `12.6 3.3 62`\n"
-        "Для яйца: `13 11 1`\n\n"
-        "Нажми ⬅️ В меню чтобы отменить.",
+        "Для яйца: `13 11 1`",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown",
     )
@@ -80,7 +89,7 @@ async def diary_enter_macros(msg: Message, state: FSMContext):
                             cal100=cal_per100)
     await msg.answer(
         f"✅ БЖУ сохранено:\n"
-        f"Б: {prot} г, Ж: {fat} г, У: {carb} г\n"
+        f"Б: {prot} г | Ж: {fat} г | У: {carb} г\n"
         f"Калорийность: **~{cal_per100} ккал / 100 г**\n\n"
         f"Теперь введи **граммы** порции. Например: `150`",
         parse_mode="Markdown",

@@ -25,61 +25,52 @@ def init_db():
         created_at TEXT
     )""")
 
+    # Добавляем новые колонки (миграция)
+    for col, default in [
+        ("water_hours", "'10,13,16,19,22'"),
+        ("weigh_hour", "8"),
+        ("remind_water", "1"),
+        ("remind_weigh", "1"),
+    ]:
+        try:
+            c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {default}")
+        except:
+            pass
+
     c.execute("""CREATE TABLE IF NOT EXISTS water (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        date TEXT,
-        ml INTEGER
+        user_id INTEGER, date TEXT, ml INTEGER
     )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS weights (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        date TEXT,
-        weight REAL,
+        user_id INTEGER, date TEXT, weight REAL,
         weigh_type TEXT DEFAULT 'fasted'
     )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS measurements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        date TEXT,
+        user_id INTEGER, date TEXT,
         neck REAL, chest REAL, waist REAL, hips REAL, arm REAL
     )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS dishes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        meal_type TEXT,
-        name TEXT,
-        base_calories REAL,
-        base_protein REAL,
-        base_fat REAL,
-        base_carbs REAL,
-        base_weight REAL,
-        ingredients TEXT
+        meal_type TEXT, name TEXT,
+        base_calories REAL, base_protein REAL, base_fat REAL,
+        base_carbs REAL, base_weight REAL, ingredients TEXT
     )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS food_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        date TEXT,
-        meal_type TEXT,
-        food_name TEXT,
-        grams REAL,
-        calories REAL,
-        protein REAL,
-        fat REAL,
-        carbs REAL
+        user_id INTEGER, date TEXT, meal_type TEXT, food_name TEXT,
+        grams REAL, calories REAL, protein REAL, fat REAL, carbs REAL
     )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS user_foods (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        name TEXT,
-        per100_cal REAL,
-        per100_prot REAL,
-        per100_fat REAL,
-        per100_carb REAL
+        user_id INTEGER, name TEXT,
+        per100_cal REAL, per100_prot REAL, per100_fat REAL, per100_carb REAL
     )""")
 
     try:
@@ -100,8 +91,9 @@ def get_user(uid):
     if not row:
         return None
     keys = ["user_id","username","gender","age","height","start_weight","current_weight",
-            "goal_weight","activity","daily_calories","daily_water","created_at"]
-    return dict(zip(keys, row))
+            "goal_weight","activity","daily_calories","daily_water","created_at",
+            "water_hours","weigh_hour","remind_water","remind_weigh"]
+    return dict(zip(keys, row[:15]))
 
 
 def create_user(uid, data):
@@ -116,6 +108,35 @@ def create_user(uid, data):
          data["activity"], data["daily_calories"], datetime.now().isoformat()))
     conn.commit()
     conn.close()
+
+
+def update_user(uid, field, value):
+    allowed = {"water_hours", "weigh_hour", "remind_water", "remind_weigh",
+               "current_weight", "daily_water"}
+    if field not in allowed:
+        return False
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute(f"UPDATE users SET {field}=? WHERE user_id=?", (value, uid))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def get_all_users():
+    conn = sqlite3.connect("slim.db")
+    c = conn.cursor()
+    c.execute("""SELECT user_id, water_hours, weigh_hour, remind_water, remind_weigh
+                 FROM users""")
+    rows = c.fetchall()
+    conn.close()
+    return [
+        {"user_id": r[0], "water_hours": r[1] or "10,13,16,19,22",
+         "weigh_hour": int(r[2]) if r[2] else 8,
+         "remind_water": int(r[3]) if r[3] else 0,
+         "remind_weigh": int(r[4]) if r[4] else 0}
+        for r in rows
+    ]
 
 
 def add_water(uid, ml):
@@ -183,115 +204,117 @@ def add_measurement(uid, neck, chest, waist, hips, arm):
     conn.close()
 
 
-def get_measurements(uid, limit=10):
-    conn = sqlite3.connect("slim.db")
-    c = conn.cursor()
-    c.execute("""SELECT date, neck, chest, waist, hips, arm FROM measurements
-                 WHERE user_id=? ORDER BY date DESC LIMIT ?""", (uid, limit))
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-
-# ===== БЛЮДА (без растительных масел) =====
+# ===== БЛЮДА (простые, без масел) =====
 
 DISHES_DATA = [
-    # ===== ЗАВТРАКИ =====
-    ("breakfast", "Овсянка с ягодами", 320, 12, 8, 48, 300,
-     "Овсянка 60г, Молоко 150мл, Ягоды 80г, Мёд 1ч.л."),
-    ("breakfast", "Омлет с овощами", 235, 20, 13, 6, 250,
-     "Яйца 3шт, Помидор 1шт, Перец 50г (на антипригарной сковороде)"),
-    ("breakfast", "Творог с бананом", 300, 25, 6, 38, 280,
-     "Творог 5% 180г, Банан 1шт, Корица"),
-    ("breakfast", "Сырники с ягодами (в духовке)", 320, 22, 10, 38, 270,
-     "Творог 5% 200г, Яйцо 1шт, Мука 30г, Ягоды 80г (запекать без масла)"),
-    ("breakfast", "Греческий йогурт с гранолой", 290, 18, 9, 36, 250,
-     "Йогурт греч. 200г, Гранола 40г, Ягоды 50г"),
-    ("breakfast", "Яичница с беконом (без масла)", 335, 24, 23, 4, 200,
-     "Яйца 3шт, Бекон 40г (на антипригарной сковороде)"),
-    ("breakfast", "Овсяноблин с творогом", 330, 25, 10, 34, 280,
-     "Овсянка 40г, Яйца 2шт, Творог 5% 100г"),
-    ("breakfast", "Тост с авокадо и яйцом", 350, 16, 20, 28, 240,
-     "Хлеб цельнозерн. 60г, Авокадо 70г, Яйцо 1шт"),
-    ("breakfast", "Каша рисовая на молоке", 310, 10, 7, 50, 320,
-     "Рис 60г, Молоко 200мл, Мёд 1ч.л., Изюм 20г"),
-    ("breakfast", "Бутерброд с лососем", 340, 22, 16, 26, 220,
-     "Хлеб цельнозерн. 60г, Лосось 80г, Сыр творожный 30г"),
-    ("breakfast", "Смузи-боул", 300, 12, 8, 44, 300,
-     "Банан 1шт, Ягоды 100г, Йогурт 150г, Овсянка 30г"),
-    ("breakfast", "Шакшука (без масла)", 275, 18, 15, 16, 300,
-     "Яйца 2шт, Томаты 200г, Перец 80г, Лук 50г (тушить в своих соках)"),
-    # ===== ОБЕДЫ =====
-    ("lunch", "Курица с гречкой и салатом", 435, 42, 7, 52, 400,
-     "Куриное филе 150г (варёное/на пару), Гречка 80г (сухая), Овощи 150г"),
-    ("lunch", "Рыба с рисом и овощами", 405, 38, 9, 48, 420,
-     "Треска 180г (запечённая), Рис 70г (сухой), Брокколи 150г"),
-    ("lunch", "Индейка с булгуром", 425, 40, 8, 50, 410,
-     "Индейка 160г (тушёная), Булгур 70г, Овощи 150г"),
-    ("lunch", "Говядина с картофелем", 520, 38, 18, 50, 450,
-     "Говядина 160г (тушёная), Картофель 200г, Овощи 100г"),
-    ("lunch", "Паста с курицей", 500, 36, 14, 58, 400,
-     "Паста 70г (сухая), Курица 130г, Томатный соус 100г"),
-    ("lunch", "Плов с курицей (без масла)", 465, 34, 11, 56, 420,
-     "Рис 80г, Курица 130г, Морковь 80г, Лук 50г (тушить с водой)"),
-    ("lunch", "Стейк с овощами гриль", 445, 42, 19, 24, 420,
-     "Стейк 180г (на гриле), Кабачок 150г, Перец 100г"),
-    ("lunch", "Куриный суп с овощами", 380, 30, 10, 40, 500,
-     "Курица 120г, Картофель 100г, Морковь 60г, Лук 40г"),
-    ("lunch", "Борщ с говядиной", 420, 26, 14, 44, 500,
-     "Говядина 130г, Свёкла 100г, Капуста 100г, Картофель 80г"),
-    ("lunch", "Киноа с овощами и курицей", 415, 38, 7, 48, 420,
-     "Киноа 70г, Курица 130г, Овощи 150г"),
-    ("lunch", "Ролл с курицей (цельнозерн.)", 440, 32, 14, 46, 380,
-     "Лаваш цельнозерн. 80г, Курица 130г, Овощи 100г, Соус 20г"),
-    ("lunch", "Чечевичный суп (без масла)", 355, 26, 3, 56, 500,
-     "Чечевица 80г, Морковь 60г, Лук 40г, Специи"),
-    ("lunch", "Тёплый салат с тунцом", 335, 36, 11, 20, 350,
-     "Тунец 150г, Овощи 200г, Яйцо 1шт"),
-    ("lunch", "Котлеты из индейки с пюре", 490, 36, 16, 50, 430,
-     "Фарш индейки 160г, Картофель 180г, Молоко 50мл (пюре без масла)"),
-    # ===== УЖИНЫ =====
-    ("dinner", "Стейк лосося с овощами", 420, 34, 22, 18, 350,
-     "Лосось 180г (запечённый), Спаржа 100г, Кабачок 150г, Лимон"),
-    ("dinner", "Куриное филе с тушёными овощами", 335, 40, 5, 28, 400,
-     "Куриное филе 180г, Овощи 200г (тушить с водой)"),
-    ("dinner", "Творожная запеканка", 350, 30, 12, 30, 320,
+    # === ЗАВТРАКИ ===
+    ("breakfast", "Овсянка на молоке с бананом", 350, 12, 7, 58, 350,
+     "Овсянка 60г, Молоко 200мл, Банан 1шт"),
+    ("breakfast", "Овсянка на воде с яблоком", 260, 8, 4, 48, 350,
+     "Овсянка 60г, Вода 250мл, Яблоко 1шт, Корица"),
+    ("breakfast", "Яичница из 2 яиц с помидором", 260, 14, 17, 6, 200,
+     "Яйца 2шт, Помидор 1шт (антипригарная сковорода)"),
+    ("breakfast", "Омлет из 2 яиц с молоком", 240, 16, 15, 4, 200,
+     "Яйца 2шт, Молоко 50мл (антипригарная сковорода)"),
+    ("breakfast", "Творог 5% с мёдом", 280, 28, 10, 18, 220,
+     "Творог 5% 180г, Мёд 1ч.л."),
+    ("breakfast", "Творог 5% с ягодами", 250, 28, 9, 14, 250,
+     "Творог 5% 180г, Ягоды 80г"),
+    ("breakfast", "Сырники в духовке", 340, 24, 10, 38, 250,
+     "Творог 5% 200г, Яйцо 1шт, Мука 30г, Сахар 1ч.л."),
+    ("breakfast", "Гречневая каша на молоке", 340, 12, 8, 56, 350,
+     "Гречка 60г, Молоко 200мл"),
+    ("breakfast", "Рисовая каша на молоке", 330, 9, 7, 58, 350,
+     "Рис 60г, Молоко 200мл, Сахар 1ч.л."),
+    ("breakfast", "Пшённая каша с тыквой", 320, 9, 6, 58, 350,
+     "Пшёнка 60г, Молоко 200мл, Тыква 100г"),
+    ("breakfast", "Бутерброд с сыром", 290, 14, 12, 32, 180,
+     "Хлеб 60г, Сыр 40г, Огурец 50г"),
+    ("breakfast", "Йогурт натуральный с гранолой", 290, 14, 8, 40, 220,
+     "Йогурт 3.2% 150г, Гранола 40г"),
+
+    # === ОБЕДЫ ===
+    ("lunch", "Борщ со сметаной", 350, 15, 12, 45, 500,
+     "Борщ 400мл, Сметана 10% 30г, Хлеб 30г"),
+    ("lunch", "Щи из свежей капусты", 280, 12, 8, 38, 500,
+     "Щи 400мл, Хлеб 30г"),
+    ("lunch", "Куриный суп с вермишелью", 320, 18, 8, 42, 500,
+     "Суп 450мл, Курица 80г, Вермишель 30г, Хлеб 20г"),
+    ("lunch", "Курица с гречкой", 430, 40, 8, 50, 400,
+     "Куриное филе 150г (варёное), Гречка 80г (сухая)"),
+    ("lunch", "Курица с рисом", 440, 38, 8, 55, 400,
+     "Куриное филе 150г (варёное), Рис 80г (сухой)"),
+    ("lunch", "Курица с макаронами", 470, 36, 8, 62, 400,
+     "Куриное филе 150г, Макароны 80г (сухие)"),
+    ("lunch", "Котлеты с пюре", 480, 30, 16, 52, 420,
+     "Котлеты (говядина+свинина) 150г, Картофель 250г, Молоко 50мл"),
+    ("lunch", "Плов с курицей", 490, 32, 12, 60, 450,
+     "Рис 80г, Курица 130г, Морковь 80г, Лук 50г"),
+    ("lunch", "Тушёная картошка с мясом", 460, 28, 14, 54, 450,
+     "Картофель 250г, Говядина 130г, Морковь 50г, Лук 30г"),
+    ("lunch", "Макароны по-флотски", 480, 26, 12, 62, 400,
+     "Макароны 80г, Фарш 130г, Лук 50г"),
+    ("lunch", "Рыбные котлеты с рисом", 420, 32, 10, 50, 420,
+     "Котлеты из минтая 150г, Рис 70г, Яйцо 1шт, Лук 30г"),
+    ("lunch", "Солянка", 380, 22, 14, 38, 500,
+     "Солянка 450мл, Хлеб 30г"),
+    ("lunch", "Голубцы с мясом", 400, 24, 14, 42, 400,
+     "Капуста 200г, Фарш 120г, Рис 50г, Томат 50г"),
+    ("lunch", "Пельмени отварные", 490, 22, 20, 55, 300,
+     "Пельмени 250г, Сметана 10% 30г"),
+
+    # === УЖИНЫ ===
+    ("dinner", "Творог 5% со сметаной", 260, 30, 10, 12, 240,
+     "Творог 5% 180г, Сметана 10% 50г"),
+    ("dinner", "Кефир с отрубями", 180, 10, 6, 22, 300,
+     "Кефир 1% 250мл, Отруби 20г"),
+    ("dinner", "Запечённая курица с овощами", 350, 38, 10, 24, 400,
+     "Куриное филе 180г (в фольге), Овощи 200г"),
+    ("dinner", "Тушёная курица с кабачком", 320, 36, 8, 22, 400,
+     "Курица 180г, Кабачок 200г, Лук 50г (тушить с водой)"),
+    ("dinner", "Куриное филе с салатом", 280, 38, 5, 16, 400,
+     "Куриное филе 180г (варёное), Салат 150г, Огурец 80г"),
+    ("dinner", "Запечённая треска", 300, 40, 8, 18, 400,
+     "Треска 200г (в фольге), Кабачок 150г, Перец 100г"),
+    ("dinner", "Салат овощной с курицей", 300, 30, 8, 22, 400,
+     "Курица 150г, Салат 100г, Огурец 80г, Помидор 80г, Сметана 10% 30г"),
+    ("dinner", "Салат из огурцов и помидоров", 120, 3, 6, 14, 300,
+     "Огурец 150г, Помидор 150г, Сметана 10% 30г, Зелень"),
+    ("dinner", "Запеканка творожная", 350, 30, 10, 32, 320,
      "Творог 5% 200г, Яйцо 1шт, Овсянка 30г, Мёд 1ч.л."),
-    ("dinner", "Индейка с брокколи", 315, 38, 6, 22, 380,
-     "Индейка 180г, Брокколи 200г (на пару)"),
-    ("dinner", "Омлет с шпинатом", 320, 26, 20, 8, 300,
-     "Яйца 3шт, Шпинат 100г, Сыр 20г (антипригарная сковорода)"),
-    ("dinner", "Запечённая рыба с овощами", 335, 36, 11, 22, 400,
-     "Треска 200г, Кабачок 150г, Перец 100г (запекать в фольге)"),
-    ("dinner", "Креветки с овощами wok", 295, 32, 7, 24, 350,
-     "Креветки 180г, Овощи 200г, Соевый соус (без масла, на антипригарной)"),
-    ("dinner", "Куриная грудка с салатом", 305, 40, 5, 20, 400,
-     "Курица 180г (варёная), Салат 150г, Огурец 80г"),
-    ("dinner", "Тушёная говядина с овощами", 375, 36, 13, 26, 400,
-     "Говядина 170г, Овощи 200г (тушить с водой)"),
-    ("dinner", "Творог с огурцом и зеленью", 235, 30, 5, 14, 300,
-     "Творог 5% 200г, Огурец 80г, Зелень"),
-    ("dinner", "Котлеты из индейки на пару", 340, 36, 12, 20, 320,
-     "Фарш индейки 180г, Лук 30г, Яйцо 1шт"),
-    ("dinner", "Салат с креветками и авокадо", 315, 26, 17, 14, 350,
-     "Креветки 150г, Авокадо 70г, Салат 100г, Лимон"),
+    ("dinner", "Гречка с кефиром", 280, 14, 6, 42, 350,
+     "Гречка 60г (сухая), Кефир 1% 200мл"),
+    ("dinner", "Овощное рагу", 240, 8, 6, 38, 400,
+     "Кабачок 150г, Картофель 100г, Морковь 80г, Лук 50г, Томат 50г"),
+    ("dinner", "Омлет с овощами", 280, 18, 14, 14, 300,
+     "Яйца 2шт, Помидор 1шт, Перец 80г (антипригарная сковорода)"),
+    ("dinner", "Индейка тушёная с овощами", 320, 34, 8, 26, 400,
+     "Индейка 180г, Овощи 200г (тушить с водой)"),
+    ("dinner", "Тушёная капуста с курицей", 300, 32, 8, 24, 400,
+     "Капуста 250г, Курица 150г, Лук 50г, Морковь 50г"),
+    ("dinner", "Творог с кефиром", 220, 28, 6, 14, 300,
+     "Творог 5% 150г, Кефир 1% 150мл"),
 ]
 
 
 def init_dishes():
-    """Создаёт/обновляет таблицу блюд. Автоматически пересобирает, если находит старую версию с маслом."""
+    """Пересоздаёт блюда, если найден старый формат или нужны обновления."""
     conn = sqlite3.connect("slim.db")
     c = conn.cursor()
 
-    # Проверяем, есть ли старые рецепты с маслом
     need_rebuild = False
     try:
         c.execute("SELECT COUNT(*) FROM dishes")
-        count = c.fetchone()[0]
-        if count == 0:
+        if c.fetchone()[0] == 0:
             need_rebuild = True
         else:
-            c.execute("SELECT COUNT(*) FROM dishes WHERE LOWER(ingredients) LIKE '%масл%'")
+            # Признак старых рецептов — наличие масла или сложных блюд
+            c.execute("""SELECT COUNT(*) FROM dishes
+                         WHERE LOWER(ingredients) LIKE '%масл%'
+                            OR name LIKE '%тунец%'
+                            OR name LIKE '%wok%'
+                            OR name LIKE '%киноа%'
+                            OR name LIKE '%авокадо%'""")
             if c.fetchone()[0] > 0:
                 need_rebuild = True
     except:
@@ -301,14 +324,9 @@ def init_dishes():
         c.execute("DROP TABLE IF EXISTS dishes")
         c.execute("""CREATE TABLE dishes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            meal_type TEXT,
-            name TEXT,
-            base_calories REAL,
-            base_protein REAL,
-            base_fat REAL,
-            base_carbs REAL,
-            base_weight REAL,
-            ingredients TEXT
+            meal_type TEXT, name TEXT,
+            base_calories REAL, base_protein REAL, base_fat REAL,
+            base_carbs REAL, base_weight REAL, ingredients TEXT
         )""")
         c.executemany("""INSERT INTO dishes
             (meal_type, name, base_calories, base_protein, base_fat, base_carbs, base_weight, ingredients)
@@ -336,7 +354,7 @@ def get_dish_by_name(name):
     return row
 
 
-# ===== ДНЕВНИК ЕДЫ =====
+# ===== ДНЕВНИК =====
 
 def add_food_log(uid, meal_type, food_name, grams, cal, prot, fat, carb):
     conn = sqlite3.connect("slim.db")
@@ -353,8 +371,8 @@ def get_food_today(uid):
     conn = sqlite3.connect("slim.db")
     c = conn.cursor()
     c.execute("""SELECT meal_type, food_name, grams, calories, protein, fat, carbs
-                 FROM food_log WHERE user_id=? AND date=?
-                 ORDER BY id""", (uid, date.today().isoformat()))
+                 FROM food_log WHERE user_id=? AND date=? ORDER BY id""",
+        (uid, date.today().isoformat()))
     rows = c.fetchall()
     conn.close()
     return rows
@@ -363,12 +381,9 @@ def get_food_today(uid):
 def get_food_totals_today(uid):
     conn = sqlite3.connect("slim.db")
     c = conn.cursor()
-    c.execute("""SELECT
-        COALESCE(SUM(calories),0),
-        COALESCE(SUM(protein),0),
-        COALESCE(SUM(fat),0),
-        COALESCE(SUM(carbs),0)
-        FROM food_log WHERE user_id=? AND date=?""",
+    c.execute("""SELECT COALESCE(SUM(calories),0), COALESCE(SUM(protein),0),
+                        COALESCE(SUM(fat),0), COALESCE(SUM(carbs),0)
+                 FROM food_log WHERE user_id=? AND date=?""",
         (uid, date.today().isoformat()))
     row = c.fetchone()
     conn.close()
@@ -389,40 +404,7 @@ def delete_last_food(uid):
     c = conn.cursor()
     c.execute("""DELETE FROM food_log WHERE id = (
         SELECT id FROM food_log WHERE user_id=? AND date=?
-        ORDER BY id DESC LIMIT 1
-    )""", (uid, date.today().isoformat()))
+        ORDER BY id DESC LIMIT 1)""",
+        (uid, date.today().isoformat()))
     conn.commit()
     conn.close()
-
-
-# ===== ЛИЧНЫЕ ПРОДУКТЫ =====
-
-def add_user_food(uid, name, cal, prot, fat, carb):
-    conn = sqlite3.connect("slim.db")
-    c = conn.cursor()
-    c.execute("""INSERT INTO user_foods
-        (user_id, name, per100_cal, per100_prot, per100_fat, per100_carb)
-        VALUES (?,?,?,?,?,?)""", (uid, name, cal, prot, fat, carb))
-    conn.commit()
-    conn.close()
-
-
-def get_user_foods(uid):
-    conn = sqlite3.connect("slim.db")
-    c = conn.cursor()
-    c.execute("""SELECT name, per100_cal, per100_prot, per100_fat, per100_carb
-                 FROM user_foods WHERE user_id=? ORDER BY name""", (uid,))
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-
-def find_food(uid, query):
-    conn = sqlite3.connect("slim.db")
-    c = conn.cursor()
-    q = f"%{query.lower()}%"
-    c.execute("""SELECT name, per100_cal, per100_prot, per100_fat, per100_carb
-                 FROM user_foods WHERE user_id=? AND LOWER(name) LIKE ?""", (uid, q))
-    user_rows = c.fetchall()
-    conn.close()
-    return user_rows

@@ -1,4 +1,4 @@
 aiogram
 matplotlib
 apscheduler
-gigachat
+openai

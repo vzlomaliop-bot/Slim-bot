@@ -2,13 +2,19 @@ from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from gigachat import GigaChat
+from openai import AsyncOpenAI
 import os
 
 from database import get_user
 from keyboards import main_menu
 
 router = Router()
+
+# Подключаемся к DeepSeek через OpenAI-совместимый клиент
+ai_client = AsyncOpenAI(
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    base_url="https://api.deepseek.com"
+)
 
 
 class AIDialog(StatesGroup):
@@ -53,15 +59,14 @@ async def ai_answer(msg: Message, state: FSMContext):
     )
 
     try:
-        credentials = os.getenv("GIGACHAT_CREDENTIALS")
-        with GigaChat(
-            credentials=credentials,
-            scope="GIGACHAT_API_PERS",   # 👈 обязательно для физлиц
-            verify_ssl_certs=False,
-        ) as client:
-            response = client.chat(prompt)
-            answer = response.choices[0].message.content
-            await msg.answer(answer, parse_mode="Markdown")
+        response = await ai_client.chat.completions.create(
+            model="deepseek-flash",  # или "deepseek-v4-pro"
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=300
+        )
+        answer = response.choices[0].message.content
+        await msg.answer(answer, parse_mode="Markdown")
     except Exception as e:
         await msg.answer(f"⚠️ Ошибка AI: {e}")
 

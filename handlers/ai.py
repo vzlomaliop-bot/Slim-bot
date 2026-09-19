@@ -10,16 +10,13 @@ from keyboards import main_menu
 
 router = Router()
 
-# Подключаемся к DeepSeek через OpenAI-совместимый клиент
 ai_client = AsyncOpenAI(
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    base_url="https://api.deepseek.com"
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1",
 )
-
 
 class AIDialog(StatesGroup):
     waiting_question = State()
-
 
 @router.message(F.text == "🤖 AI-помощник")
 async def ai_start(msg: Message, state: FSMContext):
@@ -34,7 +31,6 @@ async def ai_start(msg: Message, state: FSMContext):
         parse_mode="Markdown"
     )
     await state.set_state(AIDialog.waiting_question)
-
 
 @router.message(AIDialog.waiting_question)
 async def ai_answer(msg: Message, state: FSMContext):
@@ -60,7 +56,7 @@ async def ai_answer(msg: Message, state: FSMContext):
 
     try:
         response = await ai_client.chat.completions.create(
-            model="deepseek-flash",  # или "deepseek-v4-pro"
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=300

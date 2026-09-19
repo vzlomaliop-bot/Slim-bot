@@ -10,7 +10,7 @@ from database import init_db, init_dishes, get_user
 from keyboards import main_menu
 from scheduler import setup_scheduler
 from handlers import (
-    onboarding, water, weight, progress, meals, diary, workouts, settings,
+    onboarding, water, weight, progress, meals, diary, workouts, settings, ai,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -27,10 +27,9 @@ dp.include_router(meals.router)
 dp.include_router(diary.router)
 dp.include_router(workouts.router)
 dp.include_router(settings.router)
+dp.include_router(ai.router)
 dp.include_router(progress.router)
 
-
-# ===== ОБЩИЕ КОМАНДЫ =====
 
 @dp.message(F.text == "⬅️ В меню")
 async def back_main(msg: Message):
@@ -65,12 +64,13 @@ async def help_cmd(msg: Message):
         "🍽 **Меню** — простые блюда под твою норму\n"
         "📝 **Дневник еды** — считай калории\n"
         "🔥 **Тренировка** — жиросжигающие комплексы\n"
+        "🤖 **AI-помощник** — спроси совета у нейросети\n"
         "⚖️ **Записать вес** — натощак утром + перед сном\n"
         "📏 **Замеры** — раз в неделю\n"
         "📊 **Прогресс** — динамика и прогноз\n"
         "📈 **График** — визуализация веса\n"
-        "⚙️ **Настройки** — своё время напоминаний о воде и весе\n\n"
-        "Команды: /start_menu, /help",
+        "⚙️ **Настройки** — своё время напоминаний\n\n"
+        "Команды: /start, /help",
         reply_markup=main_menu(),
         parse_mode="Markdown",
     )

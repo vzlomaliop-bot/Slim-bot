@@ -56,7 +56,8 @@ async def ai_answer(msg: Message, state: FSMContext):
         credentials = os.getenv("GIGACHAT_CREDENTIALS")
         with GigaChat(
             credentials=credentials,
-            verify_ssl_certs=False,  # для теста, потом можно включить
+            scope="GIGACHAT_API_PERS",   # 👈 обязательно для физлиц
+            verify_ssl_certs=False,
         ) as client:
             response = client.chat(prompt)
             answer = response.choices[0].message.content

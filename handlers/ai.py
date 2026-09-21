@@ -10,9 +10,10 @@ from keyboards import main_menu
 
 router = Router()
 
+# Подключаемся к OpenRouter через OpenAI-совместимый клиент
 ai_client = AsyncOpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url="https://openrouter.ai/api/v1"
 )
 
 class AIDialog(StatesGroup):
@@ -56,7 +57,7 @@ async def ai_answer(msg: Message, state: FSMContext):
 
     try:
         response = await ai_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="meta-llama/llama-3.1-8b-instruct:free",  # бесплатная модель
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=300

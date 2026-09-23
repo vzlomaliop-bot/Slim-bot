@@ -7,12 +7,14 @@ router = Router()
 
 
 def _clean_name(ex_key):
-    """Достаёт чистое имя упражнения из 'day|exercise' или просто exercise."""
+    """Достаёт имя упражнения и отбрасывает мусор (None, пусто, разделители)."""
     if not ex_key:
         return None
     parts = ex_key.split("|")
     name = parts[-1].strip()
-    if not name or name.lower() == "none":
+    if not name:
+        return None
+    if name.lower() in ("none", "null", "nan", "0"):
         return None
     return name
 
@@ -21,7 +23,7 @@ def _clean_name(ex_key):
 async def progress_cb(call: CallbackQuery):
     exercises = get_user_exercises(call.from_user.id)
 
-    # Чистим и убираем дубли
+    # Чистим мусор и убираем дубли
     cleaned = []
     seen = set()
     for i, ex in enumerate(exercises):
@@ -41,16 +43,8 @@ async def progress_cb(call: CallbackQuery):
         )
         return
 
-    # Разбиваем по 2 кнопки в ряд для компактности
-    rows = []
-    row = []
-    for idx, _, name in cleaned:
-        row.append(InlineKeyboardButton(text=name, callback_data=f"ex_{idx}"))
-        if len(row) == 1:  # по одной в ряд — длинные названия
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
+    rows = [[InlineKeyboardButton(text=name, callback_data=f"ex_{idx}")]
+            for idx, _, name in cleaned]
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="change_prog")])
 
     kb = InlineKeyboardMarkup(inline_keyboard=rows)
